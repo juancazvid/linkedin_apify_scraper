@@ -1,0 +1,87 @@
+{
+    "title": "LinkedIn Scraper Input",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "scrapeType": {
+            "title": "Scrape Type",
+            "type": "string",
+            "description": "Type of LinkedIn content to scrape",
+            "enum": ["person", "company", "job", "job_search"],
+            "default": "person",
+            "enumTitles": ["Person Profiles", "Company Pages", "Job Postings", "Job Search"],
+            "editor": "select"
+        },
+        "urls": {
+            "title": "LinkedIn URLs",
+            "type": "array",
+            "description": "List of LinkedIn URLs to scrape (profile, company, or job URLs)",
+            "editor": "stringList",
+            "items": {
+                "type": "string",
+                "pattern": "^https://([a-z]{2,3}\\.)?linkedin\\.com/.*"
+            },
+            "prefill": [
+                "https://www.linkedin.com/in/example-profile"
+            ]
+        },
+        "email": {
+            "title": "LinkedIn Email",
+            "type": "string",
+            "description": "Email address for LinkedIn login (required if cookie not provided)",
+            "editor": "textfield"
+        },
+        "password": {
+            "title": "LinkedIn Password",
+            "type": "string",
+            "description": "Password for LinkedIn login (required if cookie not provided)",
+            "editor": "textfield",
+            "isSecret": true
+        },
+        "cookie": {
+            "title": "LinkedIn Cookie (li_at)",
+            "type": "string",
+            "description": "LinkedIn 'li_at' cookie value for authentication (alternative to email/password)",
+            "editor": "textarea"
+        },
+        "useProxy": {
+            "title": "Use Proxy",
+            "type": "boolean",
+            "description": "Use Apify proxy to avoid detection and IP blocks",
+            "default": true
+        },
+        "headless": {
+            "title": "Headless Mode",
+            "type": "boolean",
+            "description": "Run browser in headless mode (faster but might be detected easier)",
+            "default": true
+        },
+        "getContacts": {
+            "title": "Get Contacts (Person only)",
+            "type": "boolean",
+            "description": "Scrape the person's connections/contacts (only for person scraping)",
+            "default": false
+        },
+        "getEmployees": {
+            "title": "Get Employees (Company only)",
+            "type": "boolean",
+            "description": "Scrape company employees (only for company scraping, may take longer)",
+            "default": false
+        },
+        "jobSearchTerm": {
+            "title": "Job Search Term",
+            "type": "string",
+            "description": "Search term for job search (only used when scrapeType is 'job_search')",
+            "editor": "textfield"
+        },
+        "maxResults": {
+            "title": "Max Results",
+            "type": "integer",
+            "description": "Maximum number of results to scrape",
+            "default": 100,
+            "minimum": 1,
+            "maximum": 1000
+        }
+    },
+    "required": []
+}
