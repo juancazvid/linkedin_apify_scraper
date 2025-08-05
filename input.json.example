@@ -1,0 +1,13 @@
+{
+    "scrapeType": "person",
+    "urls": [
+        "https://www.linkedin.com/in/williamhgates",
+        "https://www.linkedin.com/in/elonmusk"
+    ],
+    "cookie": "YOUR_LI_AT_COOKIE_VALUE_HERE",
+    "useProxy": true,
+    "headless": true,
+    "getContacts": false,
+    "maxResults": 10,
+    "_comment": "Replace cookie with your LinkedIn li_at cookie value or use email/password instead"
+}
