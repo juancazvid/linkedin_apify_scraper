@@ -1,0 +1,53 @@
+{
+    "actorSpecification": 1,
+    "name": "linkedin-scraper",
+    "title": "LinkedIn Profile, Company & Job Scraper",
+    "description": "Scrape LinkedIn profiles, companies, jobs, and job searches. Supports authentication via email/password or cookies. Uses Apify proxies for reliable scraping.",
+    "version": "1.0.0",
+    "meta": {
+        "templateId": "python-selenium"
+    },
+    "input": "./input_schema.json",
+    "dockerfile": "./Dockerfile",
+    "readme": "./README.md",
+    "categories": [
+        "SOCIAL_MEDIA",
+        "LEAD_GENERATION",
+        "JOBS",
+        "PEOPLE"
+    ],
+    "defaultRunOptions": {
+        "build": "latest",
+        "timeoutSecs": 3600,
+        "memoryMbytes": 2048
+    },
+    "storages": {
+        "dataset": {
+            "actorSpecification": 1,
+            "views": {
+                "people": {
+                    "title": "People Profiles",
+                    "transformation": {
+                        "fields": [
+                            "name",
+                            "location",
+                            "job_title",
+                            "company",
+                            "about",
+                            "url"
+                        ]
+                    },
+                    "display": {
+                        "component": "table",
+                        "columns": [
+                            {"field": "name", "label": "Name", "width": 200},
+                            {"field": "job_title", "label": "Job Title", "width": 200},
+                            {"field": "company", "label": "Company", "width": 150},
+                            {"field": "location", "label": "Location", "width": 150}
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}
