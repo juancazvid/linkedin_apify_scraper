@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  linkedin-scraper:
+    build: .
+    container_name: linkedin-scraper-actor
+    environment:
+      - APIFY_LOCAL_STORAGE_DIR=/tmp/storage
+      - APIFY_TOKEN=${APIFY_TOKEN}
+      - APIFY_DEFAULT_DATASET_ID=${APIFY_DEFAULT_DATASET_ID}
+      - APIFY_DEFAULT_KEY_VALUE_STORE_ID=${APIFY_DEFAULT_KEY_VALUE_STORE_ID}
+      - APIFY_PROXY_PASSWORD=${APIFY_PROXY_PASSWORD}
+      - LINKEDIN_EMAIL=${LINKEDIN_EMAIL}
+      - LINKEDIN_PASSWORD=${LINKEDIN_PASSWORD}
+      - LINKEDIN_COOKIE=${LINKEDIN_COOKIE}
+    volumes:
+      - ./storage:/tmp/storage
+      - ./src:/usr/src/app/src
+      - ./linkedin_scraper:/usr/src/app/linkedin_scraper
+    network_mode: host
+    stdin_open: true
+    tty: true
+    
+  # Optional: Selenium Grid for debugging
+  selenium-hub:
+    image: selenium/hub:latest
+    container_name: selenium-hub
+    ports:
+      - "4444:4444"
+    environment:
+      - GRID_MAX_SESSION=5
+      - GRID_BROWSER_TIMEOUT=300
+      - GRID_TIMEOUT=300
+      
+  selenium-chrome:
+    image: selenium/node-chrome:latest
+    container_name: selenium-chrome
+    depends_on:
+      - selenium-hub
+    environment:
+      - HUB_HOST=selenium-hub
+      - HUB_PORT=4444
+      - NODE_MAX_INSTANCES=5
+      - NODE_MAX_SESSION=5
+    volumes:
+      - /dev/shm:/dev/shm
+    links:
+      - selenium-hub
+
+networks:
+  default:
+    driver: bridge
