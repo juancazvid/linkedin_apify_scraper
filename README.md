@@ -14,6 +14,15 @@
 
 ## 🚀 Quick Start
 
+### Project Setup
+
+All configuration files go in the **root directory** of your project:
+- `docker-compose.yml` - Development environment (root level)
+- `Dockerfile` - Container configuration (root level)
+- `actor.json` - Actor metadata (root level)
+- `input_schema.json` - Input validation (root level)
+- All other config files at root level
+
 ### Authentication Options
 
 #### Option 1: Email & Password
@@ -50,12 +59,60 @@
 | `email` | string | ⚠️ | LinkedIn email (required if no cookie) |
 | `password` | string | ⚠️ | LinkedIn password (required if no cookie) |
 | `cookie` | string | ⚠️ | LinkedIn li_at cookie (alternative to email/password) |
-| `useProxy` | boolean | ❌ | Use Apify proxy (default: true) |
+| `proxyConfiguration` | object | ❌ | Proxy settings (default: Apify proxy enabled) |
+| `proxyRotation` | string | ❌ | Proxy rotation strategy: `RECOMMENDED`, `PER_REQUEST`, `UNTIL_FAILURE` |
+| `sessionPoolName` | string | ❌ | Session pool name for sharing sessions across runs |
 | `headless` | boolean | ❌ | Run in headless mode (default: true) |
 | `getContacts` | boolean | ❌ | Scrape person's connections (person only) |
 | `getEmployees` | boolean | ❌ | Scrape company employees (company only) |
 | `jobSearchTerm` | string | ⚠️ | Search term (required for job_search) |
 | `maxResults` | integer | ❌ | Maximum results to scrape (default: 100) |
+
+### 🔧 Proxy Configuration
+
+The actor supports advanced proxy configuration for reliable scraping:
+
+#### **Proxy Configuration Object**
+```json
+{
+    "useApifyProxy": true,
+    "apifyProxyGroups": ["RESIDENTIAL"],
+    "apifyProxyCountry": "US"
+}
+```
+
+Or use custom proxies:
+```json
+{
+    "useApifyProxy": false,
+    "proxyUrls": [
+        "http://proxy1.example.com:8080",
+        "http://proxy2.example.com:8080"
+    ]
+}
+```
+
+#### **Proxy Rotation Strategies**
+
+- **`RECOMMENDED`** (default): Smart rotation based on proxy health
+- **`PER_REQUEST`**: New proxy for each request (safest but slower)
+- **`UNTIL_FAILURE`**: Keep proxy until it fails (fastest but riskier)
+
+#### **Session Pools**
+
+Session pools maintain state across actor runs:
+```json
+{
+    "sessionPoolName": "linkedin_session_pool_1",
+    "proxyRotation": "RECOMMENDED"
+}
+```
+
+Benefits:
+- Reuse authenticated sessions
+- Maintain cookies across runs
+- Reduce login frequency
+- Better rate limit management
 
 ## 📤 Output Format
 
@@ -178,6 +235,87 @@
     "getContacts": true
 }
 ```
+
+## 🛡️ How the Proxy System Works
+
+The LinkedIn Scraper Actor includes a sophisticated proxy management system designed for reliable, undetected scraping:
+
+### **Proxy Configuration Options**
+
+1. **Apify Proxy** (Recommended)
+   - Automatic proxy rotation
+   - Residential and datacenter options
+   - Geographic targeting
+   - Session management
+
+2. **Custom Proxies**
+   - Support for your own proxy servers
+   - HTTP/HTTPS proxy support
+   - Authentication support
+
+3. **No Proxy**
+   - For local testing only
+   - Not recommended for production
+
+### **Rotation Strategies**
+
+#### **RECOMMENDED** (Default)
+- Smart rotation based on proxy health
+- Reuses working proxies
+- Automatically discards failed proxies
+- Best balance of speed and reliability
+
+#### **PER_REQUEST**
+- New proxy for every request
+- Maximum anonymity
+- Slower but safest
+- Recreates browser session each time
+
+#### **UNTIL_FAILURE**
+- Keeps same proxy until it fails
+- Fastest option
+- Good for small batches
+- Automatic failover on errors
+
+### **Session Pools**
+
+Session pools maintain authenticated state across actor runs:
+
+```json
+{
+    "sessionPoolName": "linkedin_pool_2025",
+    "proxyRotation": "RECOMMENDED"
+}
+```
+
+**Benefits:**
+- Cookies persist across runs
+- Reduces login frequency
+- Better rate limit management
+- Shared state between actors
+
+**How it works:**
+1. First run creates and saves session
+2. Subsequent runs reuse the session
+3. Sessions expire after 24 hours of inactivity
+4. Automatic session refresh on expiry
+
+### **Proxy Failure Handling**
+
+The actor automatically handles proxy failures:
+
+1. **Detection**: Monitors for connection errors
+2. **Retry**: Attempts with exponential backoff
+3. **Rotation**: Switches proxy after max failures
+4. **Recovery**: Re-authenticates if needed
+
+### **Best Practices**
+
+1. **For Testing**: Use no proxy or datacenter proxies
+2. **For Production**: Always use residential proxies
+3. **For High Volume**: Use PER_REQUEST rotation
+4. **For Speed**: Use UNTIL_FAILURE with session pools
+5. **For Reliability**: Use RECOMMENDED with residential proxies
 
 ## 🛡️ Anti-Detection Tips
 
