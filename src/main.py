@@ -26,9 +26,101 @@ class LinkedInScraperActor:
         self.request_count = 0
         self.max_retries = 3
         self.retry_delay = 5  # seconds
+        self.proxy_config = None
+        self.proxy_rotation = "RECOMMENDED"
+        self.session_pool_name = None
+        self.current_proxy_url = None
+        self.proxy_failure_count = 0
+        self.max_proxy_failures = 5
+    
+    async def setup_proxy_configuration(self, proxy_config: Dict[str, Any]) -> Optional[Any]:
+        """Setup proxy configuration based on input."""
+        if not proxy_config:
+            return None
+            
+        try:
+            # Check if using Apify proxy
+            if proxy_config.get("useApifyProxy"):
+                # Create Apify proxy configuration
+                config_options = {
+                    "groups": proxy_config.get("apifyProxyGroups", ["RESIDENTIAL"]),
+                    "country_code": proxy_config.get("apifyProxyCountry", "US")
+                }
+                
+                return Actor.create_proxy_configuration(**config_options)
+                
+            # Check for custom proxy URLs
+            elif proxy_config.get("proxyUrls"):
+                # Return custom proxy configuration
+                return {
+                    "type": "custom",
+                    "urls": proxy_config.get("proxyUrls")
+                }
+                
+            return None
+            
+        except Exception as e:
+            Actor.log.error(f"Failed to setup proxy configuration: {e}")
+            return None
+    
+    async def get_proxy_url(self) -> Optional[str]:
+        """Get a proxy URL based on rotation strategy."""
+        if not self.proxy_config:
+            return None
+            
+        try:
+            # Handle Apify proxy
+            if hasattr(self.proxy_config, 'new_url'):
+                # Check rotation strategy
+                if self.proxy_rotation == "PER_REQUEST":
+                    # Always get a new proxy for each request
+                    if self.session_pool_name:
+                        session_id = f"{self.session_pool_name}_{self.request_count}"
+                        return await self.proxy_config.new_url(session_id)
+                    else:
+                        return await self.proxy_config.new_url()
+                        
+                elif self.proxy_rotation == "UNTIL_FAILURE":
+                    # Keep using the same proxy until it fails
+                    if not self.current_proxy_url or self.proxy_failure_count >= self.max_proxy_failures:
+                        self.proxy_failure_count = 0
+                        if self.session_pool_name:
+                            session_id = f"{self.session_pool_name}_persistent"
+                            self.current_proxy_url = await self.proxy_config.new_url(session_id)
+                        else:
+                            self.current_proxy_url = await self.proxy_config.new_url()
+                    return self.current_proxy_url
+                    
+                else:  # RECOMMENDED
+                    # Use session pool if available, otherwise rotate smartly
+                    if self.session_pool_name:
+                        session_id = f"{self.session_pool_name}_{self.request_count % 10}"
+                        return await self.proxy_config.new_url(session_id)
+                    else:
+                        return await self.proxy_config.new_url()
+                        
+            # Handle custom proxy
+            elif isinstance(self.proxy_config, dict) and self.proxy_config.get("type") == "custom":
+                urls = self.proxy_config.get("urls", [])
+                if urls:
+                    if self.proxy_rotation == "PER_REQUEST":
+                        return random.choice(urls)
+                    elif self.proxy_rotation == "UNTIL_FAILURE":
+                        if not self.current_proxy_url:
+                            self.current_proxy_url = random.choice(urls)
+                        return self.current_proxy_url
+                    else:  # RECOMMENDED
+                        # Round-robin through custom proxies
+                        index = self.request_count % len(urls)
+                        return urls[index]
+                        
+        except Exception as e:
+            Actor.log.error(f"Failed to get proxy URL: {e}")
+            
+        return None
         
-    def setup_driver(self, use_proxy: bool = True, headless: bool = True) -> webdriver.Chrome:
-        """Set up Chrome driver with Apify proxy if enabled."""
+    async def setup_driver(self, headless: bool = True) -> webdriver.Chrome:
+        """Set up Chrome driver with proxy if configured."""
         chrome_options = Options()
         
         if headless:
@@ -56,18 +148,21 @@ class LinkedInScraperActor:
         chrome_options.add_argument('--window-size=1920,1080')
         chrome_options.add_argument('--start-maximized')
         
-        if use_proxy:
-            proxy_config = Actor.create_proxy_configuration()
-            if proxy_config:
-                proxy_url = asyncio.run(proxy_config.new_url())
-                chrome_options.add_argument(f'--proxy-server={proxy_url}')
-                Actor.log.info(f"Using proxy: {proxy_url}")
+        # Set up proxy if configured
+        proxy_url = await self.get_proxy_url()
+        if proxy_url:
+            chrome_options.add_argument(f'--proxy-server={proxy_url}')
+            Actor.log.info(f"Using proxy: {proxy_url[:50]}...")  # Log partial URL for security
         
         # Use Apify's Chrome binary if available
         try:
             driver = webdriver.Chrome(options=chrome_options)
         except Exception as e:
             Actor.log.error(f"Failed to create Chrome driver: {e}")
+            # If proxy failed, increment failure count
+            if proxy_url and self.proxy_rotation == "UNTIL_FAILURE":
+                self.proxy_failure_count += 1
+                Actor.log.warning(f"Proxy failure count: {self.proxy_failure_count}/{self.max_proxy_failures}")
             raise
             
         # Execute script to mask automation
@@ -352,7 +447,12 @@ class LinkedInScraperActor:
             email = actor_input.get("email")
             password = actor_input.get("password")
             cookie = actor_input.get("cookie")
-            use_proxy = actor_input.get("useProxy", True)
+            
+            # Proxy configuration
+            proxy_configuration = actor_input.get("proxyConfiguration", {"useApifyProxy": True})
+            self.proxy_rotation = actor_input.get("proxyRotation", "RECOMMENDED")
+            self.session_pool_name = actor_input.get("sessionPoolName")
+            
             headless = actor_input.get("headless", True)
             get_contacts = actor_input.get("getContacts", False)
             get_employees = actor_input.get("getEmployees", False)
@@ -365,21 +465,36 @@ class LinkedInScraperActor:
                 await Actor.set_value("ERROR", {"error": "Authentication credentials missing"})
                 return results
             
+            # Setup proxy configuration
+            Actor.log.info("Setting up proxy configuration...")
+            self.proxy_config = await self.setup_proxy_configuration(proxy_configuration)
+            
             # Setup driver
             Actor.log.info("Setting up Chrome driver...")
-            self.driver = self.setup_driver(use_proxy=use_proxy, headless=headless)
+            self.driver = await self.setup_driver(headless=headless)
             
             # Login to LinkedIn
             if not self.login_to_linkedin(self.driver, email, password, cookie):
                 await Actor.set_value("ERROR", {"error": "Login failed"})
                 return results
             
+            # Save session info if using session pool
+            if self.session_pool_name:
+                session_info = {
+                    "session_pool": self.session_pool_name,
+                    "login_time": datetime.now().isoformat(),
+                    "status": "active"
+                }
+                await Actor.set_value(f"SESSION_{self.session_pool_name}", session_info)
+            
             # Save progress periodically
             progress = {
                 "total": min(len(urls), max_results) if urls else max_results,
                 "completed": 0,
                 "failed": 0,
-                "scrape_type": scrape_type
+                "scrape_type": scrape_type,
+                "proxy_rotation": self.proxy_rotation,
+                "session_pool": self.session_pool_name
             }
             await Actor.set_value("PROGRESS", progress)
             
@@ -388,14 +503,37 @@ class LinkedInScraperActor:
                 for i, url in enumerate(urls[:max_results]):
                     Actor.log.info(f"Processing person {i+1}/{min(len(urls), max_results)}: {url}")
                     try:
+                        # For PER_REQUEST rotation, recreate driver
+                        if self.proxy_rotation == "PER_REQUEST" and i > 0:
+                            self.driver.quit()
+                            self.driver = await self.setup_driver(headless=headless)
+                            # Re-login if needed
+                            if not self.login_to_linkedin(self.driver, email, password, cookie):
+                                Actor.log.error(f"Failed to re-login for URL {url}")
+                                progress["failed"] += 1
+                                continue
+                        
                         result = self.retry_on_failure(self.scrape_person, url, get_contacts)
                         results.append(result)
                         await Actor.push_data(result)
                         progress["completed"] += 1
+                        
                     except Exception as e:
                         Actor.log.error(f"Failed to scrape {url}: {e}")
                         progress["failed"] += 1
                         results.append({"error": str(e), "url": url, "type": "person"})
+                        
+                        # If using UNTIL_FAILURE, check if we need to rotate proxy
+                        if self.proxy_rotation == "UNTIL_FAILURE":
+                            self.proxy_failure_count += 1
+                            if self.proxy_failure_count >= self.max_proxy_failures:
+                                Actor.log.info("Max proxy failures reached, rotating proxy...")
+                                self.current_proxy_url = None
+                                self.driver.quit()
+                                self.driver = await self.setup_driver(headless=headless)
+                                if not self.login_to_linkedin(self.driver, email, password, cookie):
+                                    Actor.log.error("Failed to re-login after proxy rotation")
+                                    break
                     
                     # Update progress
                     await Actor.set_value("PROGRESS", progress)
@@ -404,10 +542,20 @@ class LinkedInScraperActor:
                 for i, url in enumerate(urls[:max_results]):
                     Actor.log.info(f"Processing company {i+1}/{min(len(urls), max_results)}: {url}")
                     try:
+                        # For PER_REQUEST rotation, recreate driver
+                        if self.proxy_rotation == "PER_REQUEST" and i > 0:
+                            self.driver.quit()
+                            self.driver = await self.setup_driver(headless=headless)
+                            if not self.login_to_linkedin(self.driver, email, password, cookie):
+                                Actor.log.error(f"Failed to re-login for URL {url}")
+                                progress["failed"] += 1
+                                continue
+                        
                         result = self.retry_on_failure(self.scrape_company, url, get_employees)
                         results.append(result)
                         await Actor.push_data(result)
                         progress["completed"] += 1
+                        
                     except Exception as e:
                         Actor.log.error(f"Failed to scrape {url}: {e}")
                         progress["failed"] += 1
@@ -420,10 +568,20 @@ class LinkedInScraperActor:
                 for i, url in enumerate(urls[:max_results]):
                     Actor.log.info(f"Processing job {i+1}/{min(len(urls), max_results)}: {url}")
                     try:
+                        # For PER_REQUEST rotation, recreate driver
+                        if self.proxy_rotation == "PER_REQUEST" and i > 0:
+                            self.driver.quit()
+                            self.driver = await self.setup_driver(headless=headless)
+                            if not self.login_to_linkedin(self.driver, email, password, cookie):
+                                Actor.log.error(f"Failed to re-login for URL {url}")
+                                progress["failed"] += 1
+                                continue
+                        
                         result = self.retry_on_failure(self.scrape_job, url)
                         results.append(result)
                         await Actor.push_data(result)
                         progress["completed"] += 1
+                        
                     except Exception as e:
                         Actor.log.error(f"Failed to scrape {url}: {e}")
                         progress["failed"] += 1
@@ -445,6 +603,19 @@ class LinkedInScraperActor:
             # Final progress update
             progress["status"] = "completed"
             await Actor.set_value("PROGRESS", progress)
+            
+            # Save session state if using session pool
+            if self.session_pool_name:
+                session_info = {
+                    "session_pool": self.session_pool_name,
+                    "completion_time": datetime.now().isoformat(),
+                    "status": "completed",
+                    "stats": {
+                        "completed": progress["completed"],
+                        "failed": progress["failed"]
+                    }
+                }
+                await Actor.set_value(f"SESSION_{self.session_pool_name}_FINAL", session_info)
             
             Actor.log.info(f"Successfully scraped {len(results)} items ({progress['failed']} failed)")
             
