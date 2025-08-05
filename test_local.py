@@ -32,7 +32,13 @@ class MockActor:
             "email": os.getenv("LINKEDIN_EMAIL"),
             "password": os.getenv("LINKEDIN_PASSWORD"),
             # "cookie": os.getenv("LINKEDIN_COOKIE"),
-            "useProxy": False,  # Disable proxy for local testing
+            "proxyConfiguration": {
+                "useApifyProxy": False,  # Disable for local testing
+                # For local testing with custom proxy:
+                # "proxyUrls": ["http://localhost:8888"]
+            },
+            "proxyRotation": "RECOMMENDED",
+            "sessionPoolName": "test_session_pool",
             "headless": False,  # Show browser for debugging
             "getContacts": False,
             "getEmployees": False,
@@ -50,9 +56,14 @@ class MockActor:
         print(f"Key-Value stored: {key} = {json.dumps(value, indent=2)}")
     
     @staticmethod
-    def create_proxy_configuration():
+    def create_proxy_configuration(**kwargs):
         """Mock proxy configuration"""
-        return None
+        class MockProxyConfig:
+            async def new_url(self, session_id=None):
+                """Mock proxy URL generation"""
+                return None
+        
+        return MockProxyConfig() if kwargs.get("useApifyProxy") else None
 
 
 async def test_scraper():
@@ -112,7 +123,7 @@ def test_specific_function():
     
     # Test driver setup
     print("Testing driver setup...")
-    driver = scraper.setup_driver(use_proxy=False, headless=False)
+    driver = asyncio.run(scraper.setup_driver(headless=False))
     
     # Test login
     print("Testing LinkedIn login...")
@@ -134,15 +145,60 @@ def test_specific_function():
     driver.quit()
 
 
+async def test_proxy_rotation():
+    """Test proxy rotation strategies"""
+    import sys
+    sys.modules['apify'] = type('module', (), {'Actor': MockActor})
+    
+    from src.main import LinkedInScraperActor
+    
+    print("=" * 60)
+    print("Testing Proxy Rotation Strategies")
+    print("=" * 60)
+    
+    # Test RECOMMENDED strategy
+    scraper = LinkedInScraperActor()
+    scraper.proxy_rotation = "RECOMMENDED"
+    scraper.session_pool_name = "test_pool"
+    scraper.proxy_config = MockActor.create_proxy_configuration(useApifyProxy=True)
+    
+    print("\n1. Testing RECOMMENDED strategy:")
+    for i in range(3):
+        scraper.request_count = i
+        url = await scraper.get_proxy_url()
+        print(f"   Request {i}: {url or 'No proxy'}")
+    
+    # Test PER_REQUEST strategy
+    scraper.proxy_rotation = "PER_REQUEST"
+    print("\n2. Testing PER_REQUEST strategy:")
+    for i in range(3):
+        scraper.request_count = i
+        url = await scraper.get_proxy_url()
+        print(f"   Request {i}: {url or 'New proxy each time'}")
+    
+    # Test UNTIL_FAILURE strategy
+    scraper.proxy_rotation = "UNTIL_FAILURE"
+    scraper.current_proxy_url = None
+    print("\n3. Testing UNTIL_FAILURE strategy:")
+    for i in range(3):
+        url = await scraper.get_proxy_url()
+        print(f"   Request {i}: {url or 'Same proxy until failure'}")
+        if i == 1:
+            scraper.proxy_failure_count = 5  # Simulate failure
+            print("   Simulating proxy failure...")
+    
+    print("=" * 60)
+
+
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Test LinkedIn Scraper Actor locally")
     parser.add_argument(
         "--mode",
-        choices=["full", "function"],
+        choices=["full", "function", "proxy"],
         default="full",
-        help="Test mode: full actor run or specific function test"
+        help="Test mode: full actor run, specific function test, or proxy rotation test"
     )
     
     args = parser.parse_args()
@@ -150,6 +206,9 @@ if __name__ == "__main__":
     if args.mode == "full":
         # Run full actor test
         asyncio.run(test_scraper())
+    elif args.mode == "proxy":
+        # Test proxy rotation strategies
+        asyncio.run(test_proxy_rotation())
     else:
         # Test specific functions
         test_specific_function()
