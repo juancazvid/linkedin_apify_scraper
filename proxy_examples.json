@@ -1,0 +1,86 @@
+{
+    "example1_apify_proxy_residential": {
+        "scrapeType": "person",
+        "urls": ["https://www.linkedin.com/in/example"],
+        "cookie": "YOUR_COOKIE",
+        "proxyConfiguration": {
+            "useApifyProxy": true,
+            "apifyProxyGroups": ["RESIDENTIAL"],
+            "apifyProxyCountry": "US"
+        },
+        "proxyRotation": "RECOMMENDED",
+        "sessionPoolName": "linkedin_residential_pool"
+    },
+    
+    "example2_apify_proxy_datacenter": {
+        "scrapeType": "company",
+        "urls": ["https://www.linkedin.com/company/microsoft"],
+        "cookie": "YOUR_COOKIE",
+        "proxyConfiguration": {
+            "useApifyProxy": true,
+            "apifyProxyGroups": ["DATACENTER"],
+            "apifyProxyCountry": "GB"
+        },
+        "proxyRotation": "PER_REQUEST",
+        "sessionPoolName": "linkedin_datacenter_pool"
+    },
+    
+    "example3_custom_proxies": {
+        "scrapeType": "job",
+        "urls": ["https://www.linkedin.com/jobs/view/123456"],
+        "cookie": "YOUR_COOKIE",
+        "proxyConfiguration": {
+            "useApifyProxy": false,
+            "proxyUrls": [
+                "http://user:pass@proxy1.example.com:8080",
+                "http://user:pass@proxy2.example.com:8080",
+                "http://user:pass@proxy3.example.com:8080"
+            ]
+        },
+        "proxyRotation": "UNTIL_FAILURE"
+    },
+    
+    "example4_no_proxy": {
+        "scrapeType": "person",
+        "urls": ["https://www.linkedin.com/in/local-test"],
+        "email": "test@example.com",
+        "password": "password123",
+        "proxyConfiguration": {
+            "useApifyProxy": false
+        },
+        "headless": false,
+        "_comment": "No proxy - for local testing only"
+    },
+    
+    "example5_session_reuse": {
+        "scrapeType": "person",
+        "urls": ["https://www.linkedin.com/in/batch-1"],
+        "cookie": "YOUR_COOKIE",
+        "proxyConfiguration": {
+            "useApifyProxy": true,
+            "apifyProxyGroups": ["RESIDENTIAL", "DATACENTER"]
+        },
+        "proxyRotation": "RECOMMENDED",
+        "sessionPoolName": "linkedin_batch_session_20250108",
+        "_comment": "Using session pool to maintain state across multiple runs"
+    },
+    
+    "example6_high_volume_safe": {
+        "scrapeType": "person",
+        "urls": [
+            "https://www.linkedin.com/in/profile1",
+            "https://www.linkedin.com/in/profile2",
+            "https://www.linkedin.com/in/profile3"
+        ],
+        "cookie": "YOUR_COOKIE",
+        "proxyConfiguration": {
+            "useApifyProxy": true,
+            "apifyProxyGroups": ["RESIDENTIAL"],
+            "apifyProxyCountry": "US"
+        },
+        "proxyRotation": "PER_REQUEST",
+        "sessionPoolName": "linkedin_safe_scraping",
+        "maxResults": 1000,
+        "_comment": "Safest configuration for high-volume scraping"
+    }
+}
